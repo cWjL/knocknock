@@ -11,7 +11,7 @@
     Client to WAP connection established
 '''
 import argparse, sys
-import subprocess
+import subprocess, logging
 
 
 def main():
@@ -20,7 +20,9 @@ def main():
     reqd.add_argument('-i','--iface',action='store',dest='iface',help='Interface to listen/send on')
     parser.add_argument('-w','--wap-mode',action='store',dest='ssid',help='WAP mode')
     parser.add_argument('-c','--client-mode',action='store_true',dest='client',help='Client mode')
-        
+    log = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s',
+                        datefmt='%a, %d %b %Y %H:%M:%S', filename='logs/knock.log', filemode='w')
     try:
         import colorama
         from colorama import Fore, Style
