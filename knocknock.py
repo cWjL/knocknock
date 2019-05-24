@@ -10,7 +10,7 @@
     WAP sends association response to client
     Client to WAP connection established
 '''
-import argparse, sys
+import argparse, sys, time
 import logging, queue
 from threading import Thread
 
@@ -50,9 +50,65 @@ def main():
                 rolling_2, rolling_3,
                 rolling_4]
 
+class Prober(Thread):
+    '''
+    Send probes to access point
+    '''
+    def __init__(self, client, tar_ssid, log):
+        Thread.__init__(self)
+        try:
+            from scapy.all import (Dot11,
+                                   Dot11Beacon,
+                                   Dot11Elt,
+                                   RadioTap,
+                                   sendp
+            )
+        except ImportError:
+            raise ImportError("Could not import Dot11 stuff")
+        self.client = client
+        self.tar_ssid = tar_ssid
+        self.setDaemon(True)
+        self.log = log
+
+    def run(self):
+        while True:
+            if not thread_queue.empty():
+                break
+            self._send_802_11_probes(self.ssid)
+            time.sleep(.1)
+
+    def _send_802_11_probes(self, ssid):
+        # the dot11 frame below is wrong. Need the subtype 4 specific parameters.
+        # Probably don't need to specifiy an IP, as I shouldn't have one yet
+        dot11 = Dot11(type=0,subtype=4,addr1="ff:ff:ff:ff:ff:ff",
+                      addr2=blah,addr3=blah)
+        beacon = Dot11Beacon()
+        essid = Dot11Elt(ID='SSID',info=ssid,len=len(ssid))
+        radiotap = RadioTap(len=18, present='Flags+Rate+Channel+dBm_AntSignal+Antenna',
+                            notdecoded='\x00\x6c' +
+                            get_frequency(self.ap.ch) +
+                            '\xc0\x00\xc0\x01\x00\x00')
+        frame = radiotap/dot11/beacon/essid
+        sendp(frame, iface=self.ap.iface, verbose=False)
+
+        '''
+        class CLIENT(Object):
+        
+            def __init__(self, wlanmon, target_ssid):
+                try:
+                    from scapy.arch import str2mac, get_if_raw_hwaddr
+                except ImportError:
+                    raise ImportError("Could not import str2mac and get_if_raw")
+                self.tar_ssid = target_ssid
+                self.iface = wlanmon
+                self.mac = str2mac(get_if_raw_hwaddr(wlanmon)[1])
+        '''
+
+
 class Beaconer(Thread):
     '''
-    Send a constant stream of beacon frames to anyone who will listen
+    Send a constant stream of beacon frames to anyone who will listen and die when queue
+    is not empty
     '''
     def __init__(self, ap, log):
         Thread.__init__(self)
@@ -75,6 +131,9 @@ class Beaconer(Thread):
                 break
             for ssid in self.ap.ssids:
                 self._send_802_11_frame(ssid)
+                time.sleep(.1)
+
+            time.sleep(.1)
 
     def _send_802_11_frame(self, ssid):
         dot11 = Dot11(type=0,subtype=8,addr1="ff:ff:ff:ff:ff:ff",
@@ -107,6 +166,21 @@ class AP(Object):
         self.hidden = False
         self.ip = wap_ip if wap_ip is not None else '10.10.0.1'
         self.bpffilter = "not ( wlan type mgt subtype beacon ) and ((ether dst host " + self.mac +") or (ether dst host ff:ff:ff:ff:ff:ff))"
+
+class CLIENT(Object):
+    '''
+    Client object
+    '''
+    def __init__(self, wlanmon, target_ssid):
+        try:
+            from scapy.arch import str2mac, get_if_raw_hwaddr
+        except ImportError:
+            raise ImportError("Could not import str2mac and get_if_raw")
+        self.tar_ssid = target_ssid
+        self.iface = wlanmon
+        self.mac = str2mac(get_if_raw_hwaddr(wlanmon)[1])
+                      
+                      
 
 class Listener(Thread):
     '''
@@ -154,9 +228,9 @@ class Listener(Thread):
                         self.log.info("Dropping corrupt packet from %s" % pkt.addr2)
                 return
 
-            if pkt.type == 802_TYPE.TYPE_MGMT:
+            if pkt.type == DOT11_TYPE.TYPE_MGMT:
                 
-                if pkt.subtype == 802_TYPE.SUBTYPE_PROBE_REQ:
+                if pkt.subtype == DOT11_TYPE.SUBTYPE_PROBE_REQ:
                     
                     if Dot11Elt in pkt:
                         ssid = pkt[Dot11Elt].info
@@ -164,23 +238,26 @@ class Listener(Thread):
 
                         if ssid in self.ap.ssids or (Dot11Elt in pkt and pkt[Dot11Elt].len == 0):
                             if not self.ap.hidden:
+                                thread_queue.put("Kill Me")
                                 # TODO: handle the probe req
                                 tmp = 0
 
-                elif pkt.subtype == 802_TYPE.SUBTYPE_AUTH_REQ:
+                elif pkt.subtype == DOT11_TYPE.SUBTYPE_AUTH_REQ:
                     
                     if pkt.addr1 == self.ap.mac:
+                        thread_queue.put("Kill Me")
                         # TODO: handle the auth request
                         tmp = 0
 
-                elif pkt.subtype == 802_TYPE.SUBTYPE_ASSOC_REQ or pkt.subtype == 802_TYPE.SUBTYPE_REASSOC_REQ:
+                elif pkt.subtype == DOT11_TYPE.SUBTYPE_ASSOC_REQ or pkt.subtype == DOT11_TYPE.SUBTYPE_REASSOC_REQ:
                     
                     if pkt.addr1 == self.ap.mac:
+                        thread_queue.put("Kill Me")
                         # TODO: handle the association request
                         if self.ap.802_1_x:
                             # TODO: handle the 802.1x EAP request
 
-            if pkt.type == 802_TYPE.TYPE_DATA:
+            if pkt.type == DOT11_TYPE.TYPE_DATA:
 
                 if EAPOL in pkt:
                     if pkt.addr1 == self.ap.mac:
@@ -218,7 +295,7 @@ class Listener(Thread):
             raise Exception("Unknown error in WAP Listener")
         
 
-class 802_TYPE:
+class DOT11_TYPE:
     MTU = 4096
     TYPE_MGMT = 0
     TYPE_CONTROL = 1
