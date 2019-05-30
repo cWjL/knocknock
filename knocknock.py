@@ -61,7 +61,8 @@ class Prober(Thread):
                                    Dot11Beacon,
                                    Dot11Elt,
                                    RadioTap,
-                                   sendp
+                                   sendp,
+                                   sniff
             )
         except ImportError:
             raise ImportError("Could not import Dot11 stuff")
@@ -69,40 +70,65 @@ class Prober(Thread):
         self.tar_ssid = tar_ssid
         self.setDaemon(True)
         self.log = log
+        self.target_ap = self._get_ap_info(self.client)
+
+    def _get_ap_info(self, client):
+        sniff(iface=client.iface,prn=_handl)
+        def _handl(pkt):
+            if pkt.haslayer(Dot11):
+                if pkt.type == 0 and pkt.subtype == 8:
+                    if pkt.info.lower() == self.target_ssid.lower():
+                        return AP(client.iface, pkt.info, pkt.addr2, pkt.addr3)
 
     def run(self):
         while True:
             if not thread_queue.empty():
                 break
-            self._send_802_11_probes(self.ssid)
+            self._send_802_11_probes(self.target_ap)
             time.sleep(.1)
 
-    def _send_802_11_probes(self, ssid):
+    def _send_802_11_probes(self, ap):
         # the dot11 frame below is wrong. Need the subtype 4 specific parameters.
         # Probably don't need to specifiy an IP, as I shouldn't have one yet
+        '''
+        Need the target AP MAC
+
+        Might need a beacon listener...
+        '''
         dot11 = Dot11(type=0,subtype=4,addr1="ff:ff:ff:ff:ff:ff",
-                      addr2=blah,addr3=blah)
+                      addr2=ap.mac,addr3=ap.bssid)
         beacon = Dot11Beacon()
-        essid = Dot11Elt(ID='SSID',info=ssid,len=len(ssid))
+        essid = Dot11Elt(ID='SSID',info=ap.ssid,len=len(ap.ssid))
         radiotap = RadioTap(len=18, present='Flags+Rate+Channel+dBm_AntSignal+Antenna',
                             notdecoded='\x00\x6c' +
-                            get_frequency(self.ap.ch) +
+                            _get_frequency(self.ap.ch) +
                             '\xc0\x00\xc0\x01\x00\x00')
         frame = radiotap/dot11/beacon/essid
         sendp(frame, iface=self.ap.iface, verbose=False)
 
-        '''
-        class CLIENT(Object):
+    def _get_frequency(self, channel):
+        if channel == 14:
+            freq = 2484
+        else:
+            freq = 2407 + (channel * 5)
+            
+        freq_string = struct.pack("<h", freq)
         
-            def __init__(self, wlanmon, target_ssid):
-                try:
-                    from scapy.arch import str2mac, get_if_raw_hwaddr
-                except ImportError:
-                    raise ImportError("Could not import str2mac and get_if_raw")
-                self.tar_ssid = target_ssid
-                self.iface = wlanmon
-                self.mac = str2mac(get_if_raw_hwaddr(wlanmon)[1])
-        '''
+        return freq_string
+
+
+class AP(Object):
+    '''
+    Legit WAP object
+    '''
+    def __init__(self, iface, ssid, mac, bssid, channel=None):
+
+        self.ssid = ssid
+        self.iface = iface
+        self.ch = channel
+        self.mac = mac
+        self.bssid = bssid
+        self.bpffilter = "not ( wlan type mgt subtype beacon ) and ((ether dst host " + self.mac +") or (ether dst host ff:ff:ff:ff:ff:ff))"
 
 
 class Beaconer(Thread):
@@ -147,9 +173,9 @@ class Beaconer(Thread):
         frame = radiotap/dot11/beacon/essid
         sendp(frame, iface=self.ap.iface, verbose=False)
 
-class AP(Object):
+class FAKE_AP(Object):
     '''
-    WAP object
+    Fake WAP object
     '''
     def __init__(self, iface, ssid, wap_ip=None, channel=None):
         try:
@@ -179,8 +205,7 @@ class CLIENT(Object):
         self.tar_ssid = target_ssid
         self.iface = wlanmon
         self.mac = str2mac(get_if_raw_hwaddr(wlanmon)[1])
-                      
-                      
+                              
 
 class Listener(Thread):
     '''
