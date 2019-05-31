@@ -117,7 +117,7 @@ class Prober(Thread):
         return freq_string
 
 
-class AP(Object):
+class AP(object):
     '''
     Legit WAP object
     '''
@@ -173,7 +173,7 @@ class Beaconer(Thread):
         frame = radiotap/dot11/beacon/essid
         sendp(frame, iface=self.ap.iface, verbose=False)
 
-class FAKE_AP(Object):
+class FAKE_AP(object):
     '''
     Fake WAP object
     '''
@@ -193,7 +193,7 @@ class FAKE_AP(Object):
         self.ip = wap_ip if wap_ip is not None else '10.10.0.1'
         self.bpffilter = "not ( wlan type mgt subtype beacon ) and ((ether dst host " + self.mac +") or (ether dst host ff:ff:ff:ff:ff:ff))"
 
-class CLIENT(Object):
+class CLIENT(object):
     '''
     Client object
     '''
@@ -331,7 +331,8 @@ class DOT11_TYPE:
     SUBTYPE_ASSOC_REQ = 0x00
     SUBTYPE_REASSOC_REQ = 0x02
     SUBTYPE_QOS_DATA = 0x28
-
+    SUBTYPE_ACK = 0x0D
+    
 class WAP_TYPE:
     AP_WLAN_TYPE_OPEN = 0
     AP_WLAN_TYPE_WPA = 1
