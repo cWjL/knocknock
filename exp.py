@@ -2,6 +2,7 @@
 from scapy.all import *
 import sys, queue, os
 from threading import Thread, Event
+
 '''
 Get doc for scapy element
 
@@ -18,7 +19,8 @@ th_event = Event()
 snf_term = Event()
 
 def main(iface1):
-    ssid = "ATT-WIFI-8671"
+
+    ssid = "Virus Installer 5GHz" # DEBUG SSID
     client = CLIENT(iface1, "ac:cb:12:ad:58:27", ssid)# iface, mac, tar_ssid
     knock = KNOCKNOCK(client)
     knock.knock()
@@ -31,23 +33,30 @@ class KNOCKNOCK(object):
     def knock(self):
         prober = Prober(self.client)
         prober.start()
-        sniff(iface=iface1, prn=self._handl, store=0, stop_filter=lambda p: snf_term.is_set())
+        sniff(iface=self.client.iface, prn=self._handl, store=0, stop_filter=lambda p: snf_term.is_set())
 
     def _handl(self, pkt):    
 
-        if pkt.haslayer(Dot11):
-
-            if pkt.type == 0 and pkt.subtype == 5: # probe response
+        if pkt.haslayer(Dot11): # 802.11 frame
+            if pkt.type == DOT11_TYPE.TYPE_MGMT: # management frame
+                if pkt.subtype == DOT11_TYPE.SUBTYPE_PROBE_RES: # probe response frame
                 
-                if pkt.info.decode("utf-8") == ssid:
-                    print("Killing prober")
-                    th_event.set()
-                    print("Got probe response from SSID: %s MAC: %s BSSID: %s" %
-                          (pkt.info.decode("utf-8"), pkt.addr2, pkt.addr3))
-                    # print/store relevant probe response info
-                    # send an auth request
+                    if pkt.info.decode("utf-8") == ssid: # frame ssid is target ssid
+                        print("Killing prober")
+                        th_event.set()
+                        print("Got probe response from SSID: %s MAC: %s BSSID: %s" %
+                              (pkt.info.decode("utf-8"), pkt.addr2, pkt.addr3))
+                        # print/store relevant probe response info
+                        # send an auth request
 
-            #elif pkt.type == 0 and pkt.subtype ==
+                elif pkt.subtype == DOT11_TYPE.SUBTYPE_AUTH:
+                    tmp = 0
+                    # print/store relevant auth response info
+                    # send an association request
+                elif pkt.subtype == DOT11_TYPE.SUBTYPE_ASSOC_RES:
+                    tmp = 0
+                    # print/store relevant auth response info
+                    # send an association request
 
     def _req_auth():
         #param = Dot11ProbeReq()
@@ -70,6 +79,22 @@ class KNOCKNOCK(object):
         sendp(auth_packet, iface=self.ap.interface, verbose=False)
     '''
 
+class DOT11_TYPE:
+    MTU = 4096
+    TYPE_MGMT = 0
+    TYPE_CONTROL = 1
+    TYPE_DATA = 2
+    SUBTYPE_DATA = 0x00
+    SUBTYPE_PROBE_REQ = 0x04
+    SUBTYPE_PROBE_RES = 0x05
+    SUBTYPE_AUTH = 0x0B
+    SUBTYPE_DEAUTH = 0x0C
+    SUBTYPE_ASSOC_REQ = 0x00
+    SUBTYPE_ASSOC_RES = 0x01
+    SUBTYPE_REASSOC_REQ = 0x02
+    SUBTYPE_QOS_DATA = 0x28
+    SUBTYPE_ACK = 0x0D
+    
 class CLIENT(object):
     
     def __init__(self, iface, mac, tar_ssid):
