@@ -33,7 +33,8 @@ class KNOCKNOCK(object):
     def knock(self):
         prober = Prober(self.client)
         prober.start()
-        sniff(iface=self.client.iface, prn=self._handl, store=0, stop_filter=lambda p: snf_term.is_set())
+        sniff(iface=self.client.iface, prn=self._handl, store=0,
+              stop_filter=lambda p: snf_term.is_set())
 
     def _handl(self, pkt):    
 
@@ -51,12 +52,13 @@ class KNOCKNOCK(object):
 
                 elif pkt.subtype == DOT11_TYPE.SUBTYPE_AUTH:
                     tmp = 0
+                    # this is a authentication response
                     # print/store relevant auth response info
                     # send an association request
                 elif pkt.subtype == DOT11_TYPE.SUBTYPE_ASSOC_RES:
                     tmp = 0
+                    # this is a association response
                     # print/store relevant auth response info
-                    # send an association request
 
     def _req_auth():
         #param = Dot11ProbeReq()
@@ -72,7 +74,8 @@ class KNOCKNOCK(object):
     '''
     def dot11_auth(self, receiver):
         auth_packet = self.ap.get_radiotap_header() \
-                      / Dot11(subtype=0x0B, addr1=receiver, addr2=self.ap.mac, addr3=self.ap.mac,SC=self.ap.next_sc()) \
+                      / Dot11(subtype=0x0B, addr1=receiver, addr2=self.ap.mac,
+                      addr3=self.ap.mac,SC=self.ap.next_sc()) \
                       / Dot11Auth(seqnum=0x02)
 
         printd("Sending Authentication (0x0B)...", Level.DEBUG)
